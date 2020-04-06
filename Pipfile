@@ -15,6 +15,7 @@ pytest = "*"
 pytest-cov = "*"
 pre-commit = "*"
 pylint = "*"
+pygsheets="*"
 
 [requires]
 python_version = "3.7"

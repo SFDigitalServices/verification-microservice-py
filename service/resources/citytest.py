@@ -1,13 +1,16 @@
 """ CityTest module"""
 #pylint: disable=too-few-public-methods
+import os
+import base64
 import sys
 import string
+import re
 import json
 import random
 import falcon
 import jsend
 import sentry_sdk
-
+import pygsheets
 
 class CityTest():
     """CityTest class"""
@@ -51,8 +54,30 @@ class CityTest():
     def is_verified(data_id, data_json):
         """ is_verified method """
         if data_id and data_json:
-            if len(data_id) == 6:
-                return True
+            if len(data_id) == 6 and "firstName" in data_json and "lastName" in data_json:
+
+                cred = base64.b64decode(os.environ.get('CITYTEST_SHEET_API_64')).decode('ascii')
+                os.environ['CITYTEST_SHEET_API'] = cred
+
+                client = pygsheets.authorize(service_account_env_var='CITYTEST_SHEET_API')
+
+                sheet = client.open_by_key(os.environ['CITYTEST_SHEET'])
+                google_sheet = os.environ['CITYTEST_LIST']
+                worksheet = sheet.worksheet('title', google_sheet)
+                found = worksheet.find(data_id, cols=(1, 1), forceFetch=True)
+                if len(found) > 0:
+                    pattern = re.compile('[^a-zA-Z]+')
+                    row = worksheet.get_row(found[0].row, include_tailing_empty=False)
+                    if(pattern.sub('', row[1]).upper() ==
+                       pattern.sub('', data_json["firstName"]).upper() and
+                       pattern.sub('', row[2]).upper() ==
+                       pattern.sub('', data_json["lastName"]).upper()
+                       ):
+                        return True
+
+                return False
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_extra('data_json', data_json)
         return False
 
     @staticmethod
