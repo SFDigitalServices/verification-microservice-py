@@ -5,7 +5,6 @@ import string
 import json
 import random
 import falcon
-from falcon.http_status import HTTPStatus
 import jsend
 import sentry_sdk
 
@@ -22,9 +21,6 @@ class CityTest():
         log_type = "error"
         resp.body = json.dumps(jsend.fail({"message": "Unauthorized"}))
         resp.status = falcon.HTTP_401
-        resp.set_header('Access-Control-Allow-Origin', '*')
-        if req.method == 'OPTIONS':
-            raise HTTPStatus(falcon.HTTP_200, body='\n')
 
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))

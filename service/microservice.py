@@ -4,6 +4,7 @@ import json
 import jsend
 import sentry_sdk
 import falcon
+from .components.cors import CORSComponent
 from .resources.welcome import Welcome
 from .resources.citytest import CityTest
 
@@ -17,7 +18,7 @@ def start_service():
         environment=os.environ.get('environment')
     )
     # Initialize Falcon
-    api = falcon.API()
+    api = falcon.API(middleware=[CORSComponent()])
     api.add_route('/welcome', Welcome())
     api.add_route('/citytest/grant/{data_id}', CityTest(), suffix='grant')
     api.add_route('/citytest/access', CityTest(), suffix='access')
