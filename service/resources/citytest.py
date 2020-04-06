@@ -20,6 +20,7 @@ class CityTest():
         log_type = "error"
         resp.body = json.dumps(jsend.fail({"message": "Unauthorized"}))
         resp.status = falcon.HTTP_401
+        resp.set_header('Access-Control-Allow-Origin', '*')
 
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))
