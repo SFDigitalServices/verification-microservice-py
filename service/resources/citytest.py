@@ -7,10 +7,13 @@ import string
 import re
 import json
 import random
+import time
 import falcon
 import jsend
 import sentry_sdk
 import pygsheets
+import redis
+
 
 class CityTest():
     """CityTest class"""
@@ -44,7 +47,9 @@ class CityTest():
     def verify(self, data_id, data_json):
         """ verify method """
         if self.is_verified(data_id, data_json):
-            payload = 'test'
+            payload = json.loads(
+                base64.b64decode(os.environ.get('CITYTEST_PAYLOAD_64')).decode('ascii'))
+            payload["time"] = time.time()
             token = self.token_create(payload)
             response = {"token": token}
             return response
@@ -86,8 +91,9 @@ class CityTest():
         seq = string.ascii_letters + string.digits
         length = 63
         token = ''.join(random.choice(seq) for i in range(length))
-        if payload:
-            pass
+        if token and payload:
+            storage = redis.from_url(os.environ.get("REDIS_URL"))
+            storage.set('citytest.'+token, json.dumps(payload))
         return token
 
     def on_post_access(self, _req, resp):
