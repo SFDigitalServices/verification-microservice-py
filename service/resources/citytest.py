@@ -17,13 +17,14 @@ import redis
 
 class CityTest():
     """CityTest class"""
+    TOKEN_LENGTH = 63
 
     def on_post_grant(self, req, resp, data_id):
         #pylint: disable=no-self-use
         """
         on POST grant request
         """
-        log_msg = "Unauthorized"
+        log_msg = "Grant Unauthorized"
         log_type = "error"
         resp.body = json.dumps(jsend.fail({"message": "Unauthorized"}))
         resp.status = falcon.HTTP_401
@@ -85,21 +86,50 @@ class CityTest():
                 scope.set_extra('data_json', data_json)
         return False
 
-    @staticmethod
-    def token_create(payload=None):
+    def token_create(self, payload=None):
         """ token_create method """
         seq = string.ascii_letters + string.digits
-        length = 63
+        length = self.TOKEN_LENGTH
         token = ''.join(random.choice(seq) for i in range(length))
         if token and payload:
             storage = redis.from_url(os.environ.get("REDIS_URL"))
             storage.set('citytest.'+token, json.dumps(payload))
         return token
 
-    def on_post_access(self, _req, resp):
+    def token_verify(self, token):
+        """ token_create method """
+        payload = None
+        if token and len(token) == self.TOKEN_LENGTH:
+            storage = redis.from_url(os.environ.get("REDIS_URL"))
+            payload = storage.get('citytest.'+token)
+            if payload:
+                payload = json.loads(payload)
+                storage.delete('citytest.'+token)
+        return payload
+
+    def on_post_access(self, req, resp):
         #pylint: disable=no-self-use
         """
         on POST access request
         """
-        resp.body = json.dumps(jsend.fail("Unauthorized"))
+        log_msg = "Access Unauthorized"
+        log_type = "error"
+        resp.body = json.dumps(jsend.fail({"message": "Unauthorized"}))
         resp.status = falcon.HTTP_401
+        if req.content_length:
+            token_json = json.loads(req.stream.read(sys.maxsize))
+            if token_json and "token" in token_json:
+                payload = self.token_verify(token_json["token"])
+
+                if payload:
+                    resp.body = json.dumps(jsend.success(payload))
+                    resp.status = falcon.HTTP_200
+                    log_msg = "Token Access"
+                    log_type = "info"
+
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_extra('token_json', token_json)
+
+        with sentry_sdk.configure_scope() as scope:
+            scope.set_extra('response', resp.body)
+        sentry_sdk.capture_message(log_msg, log_type)
