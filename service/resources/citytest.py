@@ -32,6 +32,11 @@ class CityTest():
 
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))
+
+            if data_id and "firstName" in data_json and "lastName" in data_json:
+                if data_json["firstName"] and data_json["lastName"]:
+                    resp.body = json.dumps(jsend.fail({"message": "You are not eligible for a test now. You told us your name is "+data_json["firstName"]+" "+data_json["lastName"]+", and your DSW number is "+data_id+". If this information is wrong, go back and enter your info again. Contact your supervisor to check your eligibility."}))
+
             verify_response = self.verify(data_id, data_json)
             if verify_response:
                 resp.body = json.dumps(jsend.success(verify_response))
