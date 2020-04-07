@@ -56,8 +56,7 @@ class CityTest():
             return response
         return False
 
-    @staticmethod
-    def is_verified(data_id, data_json):
+    def is_verified(self, data_id, data_json):
         """ is_verified method """
         if data_id and data_json:
             if len(data_id) == 6 and "firstName" in data_json and "lastName" in data_json:
@@ -70,20 +69,27 @@ class CityTest():
                 sheet = client.open_by_key(os.environ['CITYTEST_SHEET'])
                 google_sheet = os.environ['CITYTEST_LIST']
                 worksheet = sheet.worksheet('title', google_sheet)
-                found = worksheet.find(data_id, cols=(1, 1), forceFetch=True)
-                if len(found) > 0:
-                    pattern = re.compile('[^a-zA-Z]+')
-                    row = worksheet.get_row(found[0].row, include_tailing_empty=False)
-                    if(pattern.sub('', row[1]).upper() ==
-                       pattern.sub('', data_json["firstName"]).upper() and
-                       pattern.sub('', row[2]).upper() ==
-                       pattern.sub('', data_json["lastName"]).upper()
-                       ):
+                cols = worksheet.get_col(1)
+                indices = [i for i, x in enumerate(cols) if x == data_id]
+                for index in indices:
+                    row = worksheet.get_row(index+1, include_tailing_empty=False)
+                    if len(row) > 2 and self.found_match(row, data_json):
                         return True
-
                 return False
             with sentry_sdk.configure_scope() as scope:
                 scope.set_extra('data_json', data_json)
+        return False
+
+    @staticmethod
+    def found_match(row, data_json):
+        """ found_match method """
+        pattern = re.compile('[^a-zA-Z]+')
+        if(pattern.sub('', row[1]).upper() ==
+           pattern.sub('', data_json["firstName"]).upper() and
+           pattern.sub('', row[2]).upper() ==
+           pattern.sub('', data_json["lastName"]).upper()
+           ):
+            return True
         return False
 
     def token_create(self, payload=None):
