@@ -26,7 +26,8 @@ class CityTest():
         """
         log_msg = "Grant Unauthorized"
         log_type = "error"
-        resp.body = json.dumps(jsend.fail({"message": "Unauthorized"}))
+        #pylint: disable=line-too-long
+        resp.body = json.dumps(jsend.fail({"message": "You are not eligible for a test now. Contact your supervisor to check on your eligibility."}))
         resp.status = falcon.HTTP_401
 
         if req.content_length:
