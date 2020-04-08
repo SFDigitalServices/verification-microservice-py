@@ -37,12 +37,12 @@ class CityTest():
                 if data_json["firstName"] and data_json["lastName"]:
                     resp.body = json.dumps(jsend.fail({"message": "You are not eligible for a test now. You told us your name is "+data_json["firstName"]+" "+data_json["lastName"]+", and your DSW number is "+data_id+". If this information is wrong, go back and enter your info again. Contact your supervisor to check your eligibility."}))
 
-            verify_response = self.verify(data_id, data_json)
-            if verify_response:
-                resp.body = json.dumps(jsend.success(verify_response))
-                resp.status = falcon.HTTP_200
-                log_msg = "Grant "+data_id
-                log_type = "info"
+                    verify_response = self.verify(data_id, data_json)
+                    if verify_response:
+                        resp.body = json.dumps(jsend.success(verify_response))
+                        resp.status = falcon.HTTP_200
+                        log_msg = "Grant "+data_id
+                        log_type = "info"
 
         with sentry_sdk.configure_scope() as scope:
             scope.set_extra('data_id', data_id)
@@ -62,6 +62,7 @@ class CityTest():
             return response
         return False
 
+    #pylint: disable=too-many-locals
     def is_verified(self, data_id, data_json):
         """ is_verified method """
         if data_id and data_json:
@@ -75,11 +76,15 @@ class CityTest():
                 sheet = client.open_by_key(os.environ['CITYTEST_SHEET'])
                 google_sheet = os.environ['CITYTEST_LIST']
                 worksheet = sheet.worksheet('title', google_sheet)
+
+                row_header = worksheet.get_row(1)
+                fn_index = row_header.index('FIRSTNAME')
+                ln_index = row_header.index('LASTNAME')
                 cols = worksheet.get_col(1)
                 indices = [i for i, x in enumerate(cols) if x == data_id]
                 for index in indices:
                     row = worksheet.get_row(index+1, include_tailing_empty=False)
-                    if len(row) > 2 and self.found_match(row, data_json):
+                    if len(row) > 2 and self.found_match(row, data_json, fn_index, ln_index):
                         return True
                 return False
             with sentry_sdk.configure_scope() as scope:
@@ -87,12 +92,12 @@ class CityTest():
         return False
 
     @staticmethod
-    def found_match(row, data_json):
+    def found_match(row, data_json, fn_index, ln_index):
         """ found_match method """
         pattern = re.compile('[^a-zA-Z]+')
-        if(pattern.sub('', row[1]).upper() ==
+        if(pattern.sub('', row[fn_index]).upper() ==
            pattern.sub('', data_json["firstName"]).upper() and
-           pattern.sub('', row[2]).upper() ==
+           pattern.sub('', row[ln_index]).upper() ==
            pattern.sub('', data_json["lastName"]).upper()
            ):
             return True
