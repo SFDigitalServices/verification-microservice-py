@@ -66,8 +66,8 @@ class CityTest():
     def is_verified(self, data_id, data_json):
         """ is_verified method """
         if data_id and data_json:
-            if len(data_id) == 6 and "firstName" in data_json and "lastName" in data_json:
-
+            if len(data_id) <= 6 and "firstName" in data_json and "lastName" in data_json:
+                data_id = data_id.rjust(6, '0')
                 cred = base64.b64decode(os.environ.get('CITYTEST_SHEET_API_64')).decode('ascii')
                 os.environ['CITYTEST_SHEET_API'] = cred
 
