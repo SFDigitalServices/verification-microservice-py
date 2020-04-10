@@ -81,7 +81,8 @@ class CityTest():
                 fn_index = row_header.index('FIRSTNAME')
                 ln_index = row_header.index('LASTNAME')
                 cols = worksheet.get_col(1)
-                indices = [i for i, x in enumerate(cols) if x == data_id]
+                indices = [i for i, x in enumerate(cols) if x.rjust(6, '0') == data_id]
+
                 for index in indices:
                     row = worksheet.get_row(index+1, include_tailing_empty=False)
                     if len(row) > 2 and self.found_match(row, data_json, fn_index, ln_index):
