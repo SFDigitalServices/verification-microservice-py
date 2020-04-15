@@ -33,16 +33,35 @@ class CityTest():
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))
 
-            if data_id and "firstName" in data_json and "lastName" in data_json:
+            if "workForCity" in data_json and data_json["workForCity"] == "no" and "employer" in data_json and data_json["employer"]:
+                payload_response = self.token_payload_create()
+                if payload_response:
+                    employer = data_json.get("employer", "N/A")
+                    resp.body = json.dumps(jsend.success(payload_response))
+                    resp.status = falcon.HTTP_200
+                    log_msg = "Grant "+employer
+                    log_type = "info"
+
+            elif data_id and "firstName" in data_json and "lastName" in data_json:
                 if data_json["firstName"] and data_json["lastName"]:
                     resp.body = json.dumps(jsend.fail({"message": "You are not eligible for a test now. You told us your name is "+data_json["firstName"]+" "+data_json["lastName"]+", and your DSW number is "+data_id+". If this information is wrong, go back and enter your info again. Contact your supervisor to check your eligibility."}))
 
-                    verify_response = self.verify(data_id, data_json)
-                    if verify_response:
-                        resp.body = json.dumps(jsend.success(verify_response))
-                        resp.status = falcon.HTTP_200
-                        log_msg = "Grant "+data_id
-                        log_type = "info"
+                    if req.get_param("verify_only") == "true":
+                        if self.is_verified(data_id, data_json):
+                            resp.body = json.dumps(jsend.success({"message": "You are eligible for a test now."}))
+                            resp.status = falcon.HTTP_200
+                            log_msg = "Verified "+data_id
+                            log_type = "info"
+                        else:
+                            log_msg = "Verification failed"
+                            log_type = "error"
+                    else:
+                        verify_response = self.verify(data_id, data_json)
+                        if verify_response:
+                            resp.body = json.dumps(jsend.success(verify_response))
+                            resp.status = falcon.HTTP_200
+                            log_msg = "Grant "+data_id
+                            log_type = "info"
 
         with sentry_sdk.configure_scope() as scope:
             scope.set_extra('data_id', data_id)
@@ -54,11 +73,7 @@ class CityTest():
     def verify(self, data_id, data_json):
         """ verify method """
         if self.is_verified(data_id, data_json):
-            payload = json.loads(
-                base64.b64decode(os.environ.get('CITYTEST_PAYLOAD_64')).decode('ascii'))
-            payload["time"] = time.time()
-            token = self.token_create(payload)
-            response = {"token": token}
+            response = self.token_payload_create()
             return response
         return False
 
@@ -103,6 +118,15 @@ class CityTest():
            ):
             return True
         return False
+
+    def token_payload_create(self):
+        """ token_payload_create """
+        payload = json.loads(
+            base64.b64decode(os.environ.get('CITYTEST_PAYLOAD_64')).decode('ascii'))
+        payload["time"] = time.time()
+        token = self.token_create(payload)
+        response = {"token": token}
+        return response
 
     def token_create(self, payload=None):
         """ token_create method """
