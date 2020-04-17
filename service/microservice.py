@@ -22,7 +22,6 @@ def start_service():
     api.add_route('/welcome', Welcome())
     api.add_route('/citytest/grant/{data_id}', CityTest(), suffix='grant')
     api.add_route('/citytest/access', CityTest(), suffix='access')
-    api.add_route('/citytest', CityTest())
     api.add_sink(default_error, '')
     return api
 
