@@ -22,9 +22,10 @@ from cryptography.fernet import Fernet
 class CityTest():
     """CityTest class"""
     TOKEN_LENGTH = 63
+    CITY_VERIFY_METHOD = 'ID_ONLY'
 
     def on_post_grant(self, req, resp, data_id):
-        #pylint: disable=no-self-use
+        #pylint: disable=no-self-use, too-many-branches
         """
         on POST grant request
         """
@@ -36,15 +37,19 @@ class CityTest():
 
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))
-
-            if "workForCity" in data_json and data_json["workForCity"] == "no" and "employer" in data_json and data_json["employer"]:
-                payload_response = self.token_payload_create()
-                if payload_response:
-                    employer = data_json.get("employer", "N/A")
-                    resp.body = json.dumps(jsend.success(payload_response))
-                    resp.status = falcon.HTTP_200
-                    log_msg = "Grant "+employer
-                    log_type = "info"
+            verify_only_success_payload = {"message": "You are eligible for a test now."}
+            if "workForCity" in data_json and data_json["workForCity"] == "no":
+                if ("employer" in data_json and data_json["employer"]) or ("employerNotListed" in data_json and data_json["employerNotListed"]):
+                    if req.get_param("verify_only") == "true":
+                        payload_response = verify_only_success_payload
+                    else:
+                        payload_response = self.token_payload_create()
+                    if payload_response:
+                        employer = data_json.get("employer", data_json.get("employerNotListed", "N/A"))
+                        resp.body = json.dumps(jsend.success(payload_response))
+                        resp.status = falcon.HTTP_200
+                        log_msg = "Grant "+employer
+                        log_type = "info"
 
             elif data_id and "firstName" in data_json and "lastName" in data_json:
                 if data_json["firstName"] and data_json["lastName"]:
@@ -52,7 +57,7 @@ class CityTest():
 
                     if req.get_param("verify_only") == "true":
                         if self.is_verified(data_id, data_json):
-                            resp.body = json.dumps(jsend.success({"message": "You are eligible for a test now."}))
+                            resp.body = json.dumps(jsend.success(verify_only_success_payload))
                             resp.status = falcon.HTTP_200
                             log_msg = "Verified "+data_id
                             log_type = "info"
@@ -113,6 +118,8 @@ class CityTest():
 
         for index in indices:
             row = worksheet.get_row(index+1, include_tailing_empty=False)
+            if self.CITY_VERIFY_METHOD == 'ID_ONLY':
+                return True
             if len(row) > 2 and self.match_row(data_json, row[fn_index], row[ln_index]):
                 return True
         return False
@@ -131,13 +138,15 @@ class CityTest():
         fn_index = 2
         for row in csv_reader:
             if row[0].rjust(6, '0') == data_id:
+                if self.CITY_VERIFY_METHOD == 'ID_ONLY':
+                    return True
                 if len(row) > 2 and self.match_row(data_json, row[fn_index], row[ln_index]):
                     return True
         return False
 
     @staticmethod
     def match_row(data_json, fname, lname):
-        """ match_row method """
+        """ match_row method to verify additional requirements """
         pattern = re.compile('[^a-zA-Z]+')
         if(pattern.sub('', fname.upper()) ==
            pattern.sub('', data_json["firstName"]).upper() and
