@@ -75,8 +75,6 @@ class CityTest():
         with sentry_sdk.configure_scope() as scope:
             scope.set_extra('data_id', data_id)
 
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_extra('response', resp.body)
         sentry_sdk.capture_message(log_msg, log_type)
 
     def verify(self, data_id, data_json):
@@ -95,8 +93,6 @@ class CityTest():
 
                 return self.verify_via_file(data_id, data_json)
 
-            with sentry_sdk.configure_scope() as scope:
-                scope.set_extra('data_json', data_json)
         return False
 
     def verify_via_google(self, data_id, data_json):
@@ -209,6 +205,4 @@ class CityTest():
             with sentry_sdk.configure_scope() as scope:
                 scope.set_extra('token_json', token_json)
 
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_extra('response', resp.body)
         sentry_sdk.capture_message(log_msg, log_type)
