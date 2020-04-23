@@ -39,17 +39,16 @@ class CityTest():
             data_json = json.loads(req.stream.read(sys.maxsize))
             verify_only_success_payload = {"message": "You are eligible for a test now."}
             if "workForCity" in data_json and data_json["workForCity"] == "no":
-                if ("employer" in data_json and data_json["employer"]) or ("employerNotListed" in data_json and data_json["employerNotListed"]):
-                    if req.get_param("verify_only") == "true":
-                        payload_response = verify_only_success_payload
-                    else:
-                        payload_response = self.token_payload_create()
-                    if payload_response:
-                        employer = data_json.get("employer", data_json.get("employerNotListed", "N/A"))
-                        resp.body = json.dumps(jsend.success(payload_response))
-                        resp.status = falcon.HTTP_200
-                        log_msg = "Grant "+employer
-                        log_type = "info"
+                if req.get_param("verify_only") == "true":
+                    payload_response = verify_only_success_payload
+                else:
+                    payload_response = self.token_payload_create()
+                if payload_response:
+                    employer = data_json.get("employer", data_json.get("employerNotListed", "N/A"))
+                    resp.body = json.dumps(jsend.success(payload_response))
+                    resp.status = falcon.HTTP_200
+                    log_msg = "Grant "+employer
+                    log_type = "info"
 
             elif data_id and "firstName" in data_json and "lastName" in data_json:
                 if data_json["firstName"] and data_json["lastName"]:
