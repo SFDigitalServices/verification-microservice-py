@@ -8,19 +8,24 @@ import re
 import json
 import random
 import time
+from io import StringIO
+import csv
+import requests
 import falcon
 import jsend
 import sentry_sdk
 import pygsheets
 import redis
+from cryptography.fernet import Fernet
 
 
 class CityTest():
     """CityTest class"""
     TOKEN_LENGTH = 63
+    CITY_VERIFY_METHOD = 'ID_ONLY'
 
     def on_post_grant(self, req, resp, data_id):
-        #pylint: disable=no-self-use
+        #pylint: disable=no-self-use, too-many-branches
         """
         on POST grant request
         """
@@ -32,11 +37,14 @@ class CityTest():
 
         if req.content_length:
             data_json = json.loads(req.stream.read(sys.maxsize))
-
-            if "workForCity" in data_json and data_json["workForCity"] == "no" and "employer" in data_json and data_json["employer"]:
-                payload_response = self.token_payload_create()
+            verify_only_success_payload = {"message": "You are eligible for a test now."}
+            if "workForCity" in data_json and data_json["workForCity"] == "no":
+                if req.get_param("verify_only") == "true":
+                    payload_response = verify_only_success_payload
+                else:
+                    payload_response = self.token_payload_create()
                 if payload_response:
-                    employer = data_json.get("employer", "N/A")
+                    employer = data_json.get("employer", data_json.get("employerNotListed", "N/A"))
                     resp.body = json.dumps(jsend.success(payload_response))
                     resp.status = falcon.HTTP_200
                     log_msg = "Grant "+employer
@@ -48,7 +56,7 @@ class CityTest():
 
                     if req.get_param("verify_only") == "true":
                         if self.is_verified(data_id, data_json):
-                            resp.body = json.dumps(jsend.success({"message": "You are eligible for a test now."}))
+                            resp.body = json.dumps(jsend.success(verify_only_success_payload))
                             resp.status = falcon.HTTP_200
                             log_msg = "Verified "+data_id
                             log_type = "info"
@@ -66,8 +74,6 @@ class CityTest():
         with sentry_sdk.configure_scope() as scope:
             scope.set_extra('data_id', data_id)
 
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_extra('response', resp.body)
         sentry_sdk.capture_message(log_msg, log_type)
 
     def verify(self, data_id, data_json):
@@ -83,37 +89,63 @@ class CityTest():
         if data_id and data_json:
             if len(data_id) <= 6 and "firstName" in data_json and "lastName" in data_json:
                 data_id = data_id.rjust(6, '0')
-                cred = base64.b64decode(os.environ.get('CITYTEST_SHEET_API_64')).decode('ascii')
-                os.environ['CITYTEST_SHEET_API'] = cred
 
-                client = pygsheets.authorize(service_account_env_var='CITYTEST_SHEET_API')
+                return self.verify_via_file(data_id, data_json)
 
-                sheet = client.open_by_key(os.environ['CITYTEST_SHEET'])
-                google_sheet = os.environ['CITYTEST_LIST']
-                worksheet = sheet.worksheet('title', google_sheet)
+        return False
 
-                row_header = worksheet.get_row(1)
-                fn_index = row_header.index('FIRSTNAME')
-                ln_index = row_header.index('LASTNAME')
-                cols = worksheet.get_col(1)
-                indices = [i for i, x in enumerate(cols) if x.rjust(6, '0') == data_id]
+    def verify_via_google(self, data_id, data_json):
+        """ verify_via_google """
+        cred = base64.b64decode(os.environ.get('CITYTEST_SHEET_API_64')).decode('ascii')
+        os.environ['CITYTEST_SHEET_API'] = cred
 
-                for index in indices:
-                    row = worksheet.get_row(index+1, include_tailing_empty=False)
-                    if len(row) > 2 and self.found_match(row, data_json, fn_index, ln_index):
-                        return True
-                return False
-            with sentry_sdk.configure_scope() as scope:
-                scope.set_extra('data_json', data_json)
+        client = pygsheets.authorize(service_account_env_var='CITYTEST_SHEET_API')
+
+        sheet = client.open_by_key(os.environ['CITYTEST_SHEET'])
+        google_sheet = os.environ['CITYTEST_LIST']
+        worksheet = sheet.worksheet('title', google_sheet)
+
+        row_header = worksheet.get_row(1)
+        fn_index = row_header.index('FIRSTNAME')
+        ln_index = row_header.index('LASTNAME')
+        cols = worksheet.get_col(1)
+        indices = [i for i, x in enumerate(cols) if x.rjust(6, '0') == data_id]
+
+        for index in indices:
+            row = worksheet.get_row(index+1, include_tailing_empty=False)
+            if self.CITY_VERIFY_METHOD == 'ID_ONLY':
+                return True
+            if len(row) > 2 and self.match_row(data_json, row[fn_index], row[ln_index]):
+                return True
+        return False
+
+    def verify_via_file(self, data_id, data_json):
+        """ verify_via_file """
+        url = os.environ['CITYTEST_FILE_URL']
+        token = os.environ['CITYTEST_FILE_TOKEN']
+        req = requests.get(url)
+        content = req.content
+        fernet = Fernet(token)
+        data = fernet.decrypt(content)
+        data_csv = data.decode('utf-8-sig')
+        csv_reader = csv.reader(StringIO(data_csv), delimiter=',')
+        ln_index = 1
+        fn_index = 2
+        for row in csv_reader:
+            if row[0].rjust(6, '0') == data_id:
+                if self.CITY_VERIFY_METHOD == 'ID_ONLY':
+                    return True
+                if len(row) > 2 and self.match_row(data_json, row[fn_index], row[ln_index]):
+                    return True
         return False
 
     @staticmethod
-    def found_match(row, data_json, fn_index, ln_index):
-        """ found_match method """
+    def match_row(data_json, fname, lname):
+        """ match_row method to verify additional requirements """
         pattern = re.compile('[^a-zA-Z]+')
-        if(pattern.sub('', row[fn_index]).upper() ==
+        if(pattern.sub('', fname.upper()) ==
            pattern.sub('', data_json["firstName"]).upper() and
-           pattern.sub('', row[ln_index]).upper() ==
+           pattern.sub('', lname.upper()) ==
            pattern.sub('', data_json["lastName"]).upper()
            ):
             return True
@@ -172,6 +204,4 @@ class CityTest():
             with sentry_sdk.configure_scope() as scope:
                 scope.set_extra('token_json', token_json)
 
-        with sentry_sdk.configure_scope() as scope:
-            scope.set_extra('response', resp.body)
         sentry_sdk.capture_message(log_msg, log_type)

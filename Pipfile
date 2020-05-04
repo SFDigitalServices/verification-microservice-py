@@ -17,6 +17,7 @@ pre-commit = "*"
 pylint = "*"
 pygsheets="*"
 redis = "*"
+cryptography = "*"
 
 [requires]
 python_version = "3.7"
